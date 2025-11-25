@@ -1,0 +1,49 @@
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  firstName   String
+  lastName    String
+  avatar      String?
+  phone       String?
+  role        Role     @default(USER)
+  status      UserStatus @default(ACTIVE)
+  skills      String[]
+  bio         String?
+  joinDate    DateTime @default(now())
+  lastActive  DateTime @default(now())
+  departmentId String?
+  dashboardLayout Json?
+
+  department  Department? @relation(fields: [departmentId], references: [id])
+  
+  createdProjects Project[] @relation("ProjectCreator")
+  assignedTasks Task[] @relation("TaskAssignee")
+  createdTasks Task[] @relation("TaskCreator")
+  comments Comment[]
+  activities Activity[]
+  notifications Notification[]
+  documents Document[]
+  teamMemberships TeamMember[]
+  sentMessages Message[] @relation("MessageSender")
+  chatRoomMembers ChatRoomMember[]
+  onboardingProcesses OnboardingProcess[]
+  offboardingProcesses OffboardingProcess[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}

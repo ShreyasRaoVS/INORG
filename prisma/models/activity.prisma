@@ -1,0 +1,28 @@
+model Activity {
+  id          String   @id @default(uuid())
+  type        ActivityType
+  description String
+  metadata    Json?
+  userId      String
+  projectId   String?
+  taskId      String?
+
+  user        User @relation(fields: [userId], references: [id])
+  project     Project? @relation(fields: [projectId], references: [id])
+  task        Task? @relation(fields: [taskId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("activities")
+}
+
+enum ActivityType {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_COMPLETED
+  COMMENT_ADDED
+  USER_JOINED
+  USER_LEFT
+}

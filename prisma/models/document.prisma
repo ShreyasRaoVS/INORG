@@ -1,0 +1,20 @@
+model Document {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  fileName    String
+  fileSize    Int
+  mimeType    String
+  fileUrl     String
+  category    String?
+  tags        String[]
+  uploadedById String?
+  isPublic    Boolean @default(false)
+
+  uploadedBy  User? @relation(fields: [uploadedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("documents")
+}

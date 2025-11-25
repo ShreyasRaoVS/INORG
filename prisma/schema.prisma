@@ -1,0 +1,568 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER & AUTHENTICATION ====================
+
+enum Role {
+  ADMIN
+  MANAGER
+  TEAM_LEAD
+  MEMBER
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  OFFBOARDING
+}
+
+model User {
+  id                String          @id @default(uuid())
+  email             String          @unique
+  password          String
+  firstName         String
+  lastName          String
+  avatar            String?
+  phone             String?
+  role              Role            @default(MEMBER)
+  status            UserStatus      @default(ACTIVE)
+  skills            String[]
+  bio               String?
+  joinDate          DateTime        @default(now())
+  lastActive        DateTime        @default(now())
+  
+  // Relations
+  departmentId      String?
+  department        Department?     @relation(fields: [departmentId], references: [id])
+  
+  createdProjects   Project[]       @relation("ProjectCreator")
+  assignedTasks     Task[]          @relation("TaskAssignee")
+  createdTasks      Task[]          @relation("TaskCreator")
+  comments          Comment[]
+  activities        Activity[]
+  notifications     Notification[]
+  documents         Document[]
+  
+  teamMemberships   TeamMember[]
+  onboardingRecord  Onboarding?
+  offboardingRecord Offboarding?
+  
+  // Chat & Messaging
+  sentMessages      Message[]       @relation("MessageSender")
+  receivedMessages  Message[]       @relation("MessageReceiver")
+  chatRoomMembers   ChatRoomMember[]
+  
+  // Dashboard Customization
+  dashboardLayout   Json?           // Stores grid layout configuration
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([email])
+  @@index([departmentId])
+  @@map("users")
+}
+
+// ==================== DEPARTMENTS ====================
+
+model Department {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  color       String    @default("#3B82F6")
+  icon        String?
+  
+  members     User[]
+  teams       Team[]
+  projects    Project[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@map("departments")
+}
+
+// ==================== TEAMS ====================
+
+model Team {
+  id           String       @id @default(uuid())
+  name         String
+  description  String?
+  avatar       String?
+  
+  departmentId String?
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  
+  members      TeamMember[]
+  projects     Project[]
+  
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  
+  @@map("teams")
+}
+
+enum TeamRole {
+  LEAD
+  MEMBER
+  CONTRIBUTOR
+}
+
+model TeamMember {
+  id        String    @id @default(uuid())
+  role      TeamRole  @default(MEMBER)
+  
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  teamId    String
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  joinedAt  DateTime  @default(now())
+  
+  @@unique([userId, teamId])
+  @@map("team_members")
+}
+
+// ==================== PROJECTS ====================
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(PLANNING)
+  priority    Priority      @default(MEDIUM)
+  
+  startDate   DateTime?
+  endDate     DateTime?
+  deadline    DateTime?
+  
+  progress    Int           @default(0)
+  
+  creatorId   String
+  creator     User          @relation("ProjectCreator", fields: [creatorId], references: [id])
+  
+  departmentId String?
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  
+  teamId      String?
+  team        Team?         @relation(fields: [teamId], references: [id])
+  
+  tasks       Task[]
+  documents   Document[]
+  activities  Activity[]
+  gitRepos    GitRepository[]
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  @@index([status])
+  @@index([creatorId])
+  @@index([teamId])
+  @@map("projects")
+}
+
+// ==================== TASKS ====================
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+  BLOCKED
+}
+
+model Task {
+  id          String      @id @default(uuid())
+  title       String
+  description String?
+  status      TaskStatus  @default(TODO)
+  priority    Priority    @default(MEDIUM)
+  
+  estimatedHours Float?
+  actualHours    Float?
+  
+  dueDate     DateTime?
+  completedAt DateTime?
+  
+  projectId   String
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  assigneeId  String?
+  assignee    User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  
+  creatorId   String
+  creator     User        @relation("TaskCreator", fields: [creatorId], references: [id])
+  
+  tags        String[]
+  attachments String[]
+  
+  comments    Comment[]
+  activities  Activity[]
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  @@index([projectId])
+  @@index([assigneeId])
+  @@index([status])
+  @@map("tasks")
+}
+
+// ==================== COMMENTS ====================
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([taskId])
+  @@map("comments")
+}
+
+// ==================== ACTIVITY TRACKING ====================
+
+enum ActivityType {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  PROJECT_COMPLETED
+  TASK_CREATED
+  TASK_ASSIGNED
+  TASK_UPDATED
+  TASK_COMPLETED
+  COMMENT_ADDED
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  DOCUMENT_UPLOADED
+  STATUS_CHANGED
+  GIT_PUSH
+  GIT_MERGE
+}
+
+model Activity {
+  id          String       @id @default(uuid())
+  type        ActivityType
+  description String
+  metadata    Json?
+  
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id])
+  
+  projectId   String?
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  taskId      String?
+  task        Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime     @default(now())
+  
+  @@index([userId])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([createdAt])
+  @@map("activities")
+}
+
+// ==================== DOCUMENTS ====================
+
+enum DocumentType {
+  PDF
+  DOC
+  SPREADSHEET
+  IMAGE
+  VIDEO
+  OTHER
+}
+
+model Document {
+  id          String       @id @default(uuid())
+  name        String
+  fileName    String
+  filePath    String
+  fileSize    Int
+  mimeType    String
+  type        DocumentType
+  
+  projectId   String?
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  uploaderId  String
+  uploader    User         @relation(fields: [uploaderId], references: [id])
+  
+  createdAt   DateTime     @default(now())
+  
+  @@index([projectId])
+  @@map("documents")
+}
+
+// ==================== ONBOARDING / OFFBOARDING ====================
+
+enum OnboardingStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Onboarding {
+  id              String           @id @default(uuid())
+  userId          String           @unique
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  status          OnboardingStatus @default(PENDING)
+  checklistItems  Json             // Array of checklist items with completion status
+  assignedBuddy   String?
+  startDate       DateTime         @default(now())
+  completedDate   DateTime?
+  
+  notes           String?
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  @@map("onboarding")
+}
+
+enum OffboardingStatus {
+  INITIATED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Offboarding {
+  id              String            @id @default(uuid())
+  userId          String            @unique
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  status          OffboardingStatus @default(INITIATED)
+  reason          String?
+  lastWorkingDay  DateTime
+  checklistItems  Json              // Exit interview, return assets, etc.
+  
+  exitInterviewCompleted Boolean    @default(false)
+  assetsReturned         Boolean    @default(false)
+  accessRevoked          Boolean    @default(false)
+  
+  notes           String?
+  completedDate   DateTime?
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@map("offboarding")
+}
+
+// ==================== NOTIFICATIONS ====================
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  TASK_COMPLETED
+  COMMENT_MENTION
+  PROJECT_UPDATED
+  DEADLINE_REMINDER
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  metadata  Json?
+  
+  createdAt DateTime         @default(now())
+  
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// ==================== GIT INTEGRATION ====================
+
+enum GitProvider {
+  GITHUB
+  GITLAB
+}
+
+model GitRepository {
+  id          String      @id @default(uuid())
+  name        String
+  url         String
+  provider    GitProvider
+  repoId      String
+  branch      String      @default("main")
+  
+  projectId   String
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  lastSync    DateTime?
+  isActive    Boolean     @default(true)
+  
+  commits     GitCommit[]
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  @@index([projectId])
+  @@map("git_repositories")
+}
+
+model GitCommit {
+  id           String        @id @default(uuid())
+  commitHash   String        @unique
+  message      String
+  author       String
+  authorEmail  String
+  committedAt  DateTime
+  
+  repositoryId String
+  repository   GitRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  
+  createdAt    DateTime      @default(now())
+  
+  @@index([repositoryId])
+  @@map("git_commits")
+}
+
+// ==================== ANALYTICS ====================
+
+model ProductivityMetric {
+  id                String   @id @default(uuid())
+  date              DateTime @db.Date
+  
+  userId            String?
+  departmentId      String?
+  teamId            String?
+  
+  tasksCompleted    Int      @default(0)
+  tasksCreated      Int      @default(0)
+  hoursLogged       Float    @default(0)
+  commitsCount      Int      @default(0)
+  productivityScore Float    @default(0)
+  
+  createdAt         DateTime @default(now())
+  
+  @@unique([date, userId, departmentId, teamId])
+  @@index([date])
+  @@map("productivity_metrics")
+}
+
+// ==================== COMPANY BANNER ====================
+
+model CompanyBanner {
+  id          String   @id @default(uuid())
+  title       String
+  content     String
+  type        String   @default("info") // info, warning, announcement, success
+  isActive    Boolean  @default(true)
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  priority    Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([isActive, startDate])
+  @@map("company_banners")
+}
+
+// ==================== INTERNAL MESSAGING ====================
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+model ChatRoom {
+  id          String          @id @default(uuid())
+  name        String?
+  isGroup     Boolean         @default(false)
+  avatar      String?
+  
+  members     ChatRoomMember[]
+  messages    Message[]
+  
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  
+  @@map("chat_rooms")
+}
+
+model ChatRoomMember {
+  id          String   @id @default(uuid())
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  roomId      String
+  room        ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  
+  joinedAt    DateTime @default(now())
+  lastRead    DateTime @default(now())
+  
+  @@unique([userId, roomId])
+  @@map("chat_room_members")
+}
+
+model Message {
+  id          String        @id @default(uuid())
+  content     String
+  status      MessageStatus @default(SENT)
+  
+  senderId    String
+  sender      User          @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  
+  receiverId  String?
+  receiver    User?         @relation("MessageReceiver", fields: [receiverId], references: [id])
+  
+  roomId      String?
+  room        ChatRoom?     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  
+  attachments String[]
+  isEdited    Boolean       @default(false)
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([roomId])
+  @@index([createdAt])
+  @@map("messages")
+}

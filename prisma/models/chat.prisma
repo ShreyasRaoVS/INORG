@@ -1,0 +1,51 @@
+model ChatRoom {
+  id          String   @id @default(uuid())
+  name        String?
+  isGroup     Boolean @default(false)
+  createdById String?
+
+  members     ChatRoomMember[]
+  messages    Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("chat_rooms")
+}
+
+model ChatRoomMember {
+  id          String   @id @default(uuid())
+  roomId      String
+  userId      String
+  joinedAt    DateTime @default(now())
+  lastReadAt  DateTime?
+
+  room        ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@map("chat_room_members")
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  content     String
+  roomId      String
+  senderId    String
+  status      MessageStatus @default(SENT)
+  readBy      String[]
+
+  room        ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender      User @relation("MessageSender", fields: [senderId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("messages")
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
